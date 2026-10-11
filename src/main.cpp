@@ -2,6 +2,7 @@
 #include <SDL3/SDL_main.h>
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <chrono>
 #include <fcntl.h>
 #include <iostream>
@@ -32,6 +33,20 @@ struct InputState {
 
     float whammy = 0.0f;
 };
+
+static double
+recordSqueeze(const input_event& input,
+              std::optional<std::chrono::microseconds>& nextButtonPressed,
+              const std::optional<std::chrono::microseconds>& spPressedAt)
+{
+    assert(spPressedAt.has_value());
+    const auto timestamp = std::chrono::seconds{input.time.tv_sec}
+                           + std::chrono::microseconds{input.time.tv_usec};
+    nextButtonPressed = timestamp;
+    return std::chrono::duration<double, std::milli>{*nextButtonPressed
+                                                     - *spPressedAt}
+            .count();
+}
 
 int main(int argc, char** argv)
 {
@@ -89,7 +104,6 @@ int main(int argc, char** argv)
     std::optional<std::chrono::microseconds> spPressedAt;
     std::optional<std::chrono::microseconds> nextButtonPressed;
     bool squeezeCheck = false;
-    bool drawSqueeze = false; // TODO: currently unused
     float whammyFull = 255.0f;
     float whammyRest = 0.0f;
     float whammyRaw = 0.0f;
@@ -126,18 +140,9 @@ int main(int argc, char** argv)
                 if (input.type == EV_KEY && input.code == fretButtons[i]) {
                     state.frets[i] = (input.value == 1);
                     if (squeezeCheck && state.frets[i]) {
-                        const auto timestamp
-                                = std::chrono::seconds{input.time.tv_sec}
-                                  + std::chrono::microseconds{
-                                          input.time.tv_usec};
-                        nextButtonPressed = timestamp;
-                        squeezeTimeMS
-                                = std::chrono::duration<
-                                          double, std::milli>{*nextButtonPressed
-                                                              - *spPressedAt}
-                                          .count();
+                        squeezeTimeMS = recordSqueeze(input, nextButtonPressed,
+                                                      spPressedAt);
                         squeezeCheck = false;
-                        drawSqueeze = true;
                     }
                 }
             }
@@ -147,18 +152,9 @@ int main(int argc, char** argv)
                 for (size_t i = 0; i < strumStates.size(); i++) {
                     state.strum[i] = (input.value == strumStates[i]);
                     if (squeezeCheck && state.strum[i]) {
-                        const auto timestamp
-                                = std::chrono::seconds{input.time.tv_sec}
-                                  + std::chrono::microseconds{
-                                          input.time.tv_usec};
-                        nextButtonPressed = timestamp;
-                        squeezeTimeMS
-                                = std::chrono::duration<
-                                          double, std::milli>{*nextButtonPressed
-                                                              - *spPressedAt}
-                                          .count();
+                        squeezeTimeMS = recordSqueeze(input, nextButtonPressed,
+                                                      spPressedAt);
                         squeezeCheck = false;
-                        drawSqueeze = true;
                     }
                 }
 
@@ -192,6 +188,7 @@ int main(int argc, char** argv)
 #endif
             }
         }
+
         if (whammyFull == whammyRest) [[unlikely]] { state.whammy = 0.0f; }
         else {
             state.whammy = std::clamp((whammyRaw - whammyRest)
@@ -200,6 +197,7 @@ int main(int argc, char** argv)
             // fixes -0.0 error! not actually redundant!
             if (state.whammy == 0.0f) { state.whammy = 0.0f; }
         }
+
         SDL_SetRenderDrawColor(renderer, 25, 25, 25, 0);
         SDL_RenderClear(renderer);
 
