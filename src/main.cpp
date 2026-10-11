@@ -286,10 +286,19 @@ int main(int argc, char** argv)
                       / static_cast<float>(SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE);
 
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-
             SDL_SetRenderScale(renderer, scale, scale);
-            SDL_RenderDebugTextFormat(renderer, 40.0f / scale, 195.0f / scale,
-                                      "%.f ms", squeezeTimeMS);
+
+            if (squeezeTimeMS - 70.0 > std::numeric_limits<double>::epsilon()) {
+                SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+                SDL_RenderDebugText(renderer, 40.0f / scale, 195.0f / scale,
+                                    "MISS");
+            }
+            else {
+                SDL_RenderDebugTextFormat(renderer, 40.0f / scale,
+                                          195.0f / scale, "%.f ms",
+                                          squeezeTimeMS);
+            }
+
             SDL_SetRenderScale(renderer, 1.0f, 1.0f);
         }
 
