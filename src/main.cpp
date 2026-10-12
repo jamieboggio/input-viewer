@@ -50,10 +50,14 @@ recordSqueeze(const input_event& input,
 
 int main(int argc, char** argv)
 {
-    (void)argc;
-    (void)argv;
+    if (argc == 1) {
+        std::cerr << "Usage: ./input_viewer <path_to_controller_device>\n\n";
+        std::cerr << "Arguments:\n\t<path_to_controller>\tPath to your gamepad "
+                     "[required]\n";
+        return 1;
+    }
 
-    int fd = open("/dev/input/event4", O_RDONLY | O_NONBLOCK);
+    int fd = open(argv[1], O_RDONLY | O_NONBLOCK);
 
     if (fd < 0) {
         std::cerr << "failed to open input device\n";
