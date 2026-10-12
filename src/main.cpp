@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <iostream>
 #include <libevdev-1.0/libevdev/libevdev.h>
+#include <libudev.h>
 #include <optional>
 #include <unistd.h>
 
@@ -57,10 +58,59 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    int fd = open(argv[1], O_RDONLY | O_NONBLOCK);
+    udev* ctx = udev_new();
+    if (ctx == nullptr) {
+        std::cerr << "failed to create input device context\n";
+        return 1;
+    }
 
+    // enumerate through devices
+    udev_enumerate* enumerator = udev_enumerate_new(ctx);
+    if (enumerator == nullptr) {
+        std::cerr << "failed to enumerate through devices\n";
+        udev_unref(ctx);
+        return 1;
+    }
+    udev_enumerate_add_match_subsystem(enumerator, "input");
+    udev_enumerate_scan_devices(enumerator);
+    udev_list_entry* devices = udev_enumerate_get_list_entry(enumerator);
+    udev_list_entry* entry;
+    udev_list_entry_foreach(entry, devices)
+    {
+        //
+        const char* sysPath = udev_list_entry_get_name(entry);
+
+        udev_device* device = udev_device_new_from_syspath(ctx, sysPath);
+        if (device == nullptr) { continue; }
+
+        const char* node = udev_device_get_devnode(device);
+        if (node != nullptr) {
+            // auto isInputEvent
+            bool isInputEvent
+                    = std::string_view{node}.starts_with("/dev/input/event");
+            if (isInputEvent) {
+                const char* joystick_id = udev_device_get_property_value(
+                        device, "ID_INPUT_JOYSTICK");
+                const char* keyboard_id = udev_device_get_property_value(
+                        device, "ID_INPUT_KEYBOARD");
+                if (!(joystick_id == nullptr && keyboard_id == nullptr)) {
+                    std::cout
+                            << node << "\tjoystick="
+                            << (joystick_id == nullptr ? "unset" : joystick_id)
+                            << " keyboard="
+                            << (keyboard_id == nullptr ? "unset" : keyboard_id)
+                            << '\n';
+                }
+            }
+        }
+        udev_device_unref(device);
+    }
+
+    int fd = open(argv[1], O_RDONLY | O_NONBLOCK);
     if (fd < 0) {
         std::cerr << "failed to open input device\n";
+        udev_enumerate_unref(enumerator);
+        udev_unref(ctx);
         return 1;
     }
 
@@ -72,8 +122,9 @@ int main(int argc, char** argv)
         return 1;
     }
 
+#ifdef PRINT
     std::cout << "Device: " << libevdev_get_name(device) << '\n';
-
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO)) return 1;
 
     SDL_Window* window = nullptr;
@@ -308,9 +359,11 @@ int main(int argc, char** argv)
         SDL_Delay(1);
     }
 cleanup:
-    libevdev_free(device);
-    close(fd);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    libevdev_free(device);
+    close(fd);
+    udev_enumerate_unref(enumerator);
+    udev_unref(ctx);
 }
